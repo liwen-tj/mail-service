@@ -14,7 +14,7 @@ MONGO_MAILS_USER_PASSWORD = env['MONGO_MAILS_USER_PASSWORD']
 MONGO_MAILS_MECHANISM = 'SCRAM-SHA-1' if not env.__contains__('MONGO_MAILS_MECHANISM') else env['MONGO_MAILS_MECHANISM']
 
 client = pymongo.MongoClient(MONGO_ADDRESS)
-client.mails.authenticate(MONGO_MAILS_USER_NAME, MONGO_MAILS_USER_PASSWORD, MONGO_MAILS_MECHANISM)
+client.mails.authenticate(MONGO_MAILS_USER_NAME, MONGO_MAILS_USER_PASSWORD, mechanism=MONGO_MAILS_MECHANISM)
 
 mails_db = client["mails"]
 col = mails_db.list_collection_names()
