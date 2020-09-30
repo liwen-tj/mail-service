@@ -6,11 +6,12 @@ from datetime import datetime
 from multiprocessing import Pool, cpu_count
 import os
 
+env = dict(os.environ)
 
-MONGO_ADDRESS = os.environ['MONGO_ADDRESS'] if os.environ['MONGO_ADDRESS'] is not None else 'mongodb://58.198.176.9:30270/'
-MONGO_MAILS_USER_NAME = os.environ['MONGO_MAILS_USER_NAME'] if os.environ['MONGO_MAILS_USER_NAME'] is not None else 'liwen'
-MONGO_MAILS_USER_PASSWORD = os.environ['MONGO_MAILS_USER_PASSWORD']
-MONGO_MAILS_MECHANISM = os.environ['MONGO_MAILS_MECHANISM'] if os.environ['MONGO_MAILS_MECHANISM'] is not None else 'SCRAM-SHA-1'
+MONGO_ADDRESS = 'mongodb://58.198.176.9:30270/' if not env.__contains__('MONGO_ADDRESS') else env['MONGO_ADDRESS']
+MONGO_MAILS_USER_NAME = 'liwen' if not env.__contains__('MONGO_MAILS_USER_NAME') else env['MONGO_MAILS_USER_NAME']
+MONGO_MAILS_USER_PASSWORD = env['MONGO_MAILS_USER_PASSWORD']
+MONGO_MAILS_MECHANISM = 'SCRAM-SHA-1' if not env.__contains__('MONGO_MAILS_MECHANISM') else env['MONGO_MAILS_MECHANISM']
 
 client = pymongo.MongoClient(MONGO_ADDRESS)
 client.mails.authenticate(MONGO_MAILS_USER_NAME, MONGO_MAILS_USER_PASSWORD, MONGO_MAILS_MECHANISM)
