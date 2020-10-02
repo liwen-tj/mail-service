@@ -15,24 +15,31 @@ MONGO_MAILS_MECHANISM = 'SCRAM-SHA-1' if not env.__contains__('MONGO_MAILS_MECHA
 
 client = pymongo.MongoClient(MONGO_ADDRESS)
 client.mails.authenticate(MONGO_MAILS_USER_NAME, MONGO_MAILS_USER_PASSWORD, mechanism=MONGO_MAILS_MECHANISM)
+# client = pymongo.MongoClient("mongodb://127.0.0.1:27017/")
 
 mails_db = client["mails"]
 col = mails_db.list_collection_names()
 ml = mails_db['maillist']
 ms = mails_db['message']
 dl = mails_db['downloaded']
+og = mails_db['original']
 yy_ = datetime.now().year
 mm_ = datetime.now().month
 cur_month = str(yy_) + ("0" + str(mm_) if mm_ < 10 else str(mm_))
 
 
 def createIndex():
-    ml.delete_many()
+    ml.drop()
     ml.create_index([('name', 1)], unique=True, background=True)
-    ms.delete_many()
+    ms.drop()
     ms.create_index([('id', 1)], unique=True, background=True)
-    dl.delete_many()
+    dl.drop()
     dl.create_index([('project', 1), ('maillist', 1), ('month', 1)], unique=True, background=True)
+
+
+def ogCreateIndex():
+    og.drop()
+    og.create_index([('project', 1), ('maillist', 1), ('month', 1)], unique=True, background=True)
 
 
 def insertMailLists():
@@ -60,15 +67,18 @@ def upsertDownloader(proj, mail, mon, n):
 
 
 def insertMonthMessage(proj, mail, mon):
-    # 先检查一下 历史月份 && 已经导入完成了
-    cond = {
-        "project": proj,
-        "maillist": mail,
-        "month": mon
-    }
-    mss = dl.find_one(cond)
-    if mss is not None and mon != cur_month:
-        return
+    # 历史月份可能不需要再导入了
+    if mon != cur_month:
+        cond = {
+            "project": proj,
+            "maillist": mail,
+            "month": mon
+        }
+        mss = dl.find_one(cond)
+        oss = og.find_one(cond)
+        if mss is not None and oss['num'] - mss['num'] < 5:
+            print(proj, mon, "already okay")
+            return
 
     # 导入该月的数据
     try:
@@ -84,20 +94,9 @@ def insertMonthMessage(proj, mail, mon):
         else:
             ms.insert_many(month_res)
         upsertDownloader(proj, mail, mon, len(month_res))
-        print(proj, mon, len(month_res), "okay")
-        print(int(time.time() - start), "s")
+        print(proj, mon, len(month_res), "month okay")
     except BaseException as e:
         print("get month data err: ", proj, mail, mon, e)
-
-
-def insertMessages(proj, mail):
-    try:
-        months = getHistoryMonths(proj, mail)
-        print("start...", proj, mail)
-        for mon in months:
-            insertMonthMessage(proj, mail, mon)
-    except BaseException as e:
-        print("get history month err: ", proj, mail, e)
 
 
 def getMailLists():
@@ -132,35 +131,45 @@ def getMessages(cond):
     return data
 
 
-def initialize():
-    print("initializing...")
-    if len(getMailLists()) == 0:
-        createIndex()
-        projects = insertMailLists()
-        print("Get projects done...")
-        for p in projects:
-            if p['name'] == 'asf-wide':
-                continue
-            mails = p['mails']
-            for m in mails:
-                insertMessages(p['name'], m)
-    else:
-        print("already inited")
+def insertMsgCount(proj, mail, month, msg):
+    try:
+        bad = (len(month) != len(msg))
+        data = []
+        for i in range(len(month)):
+            data.append({
+                'project': proj,
+                'maillist': mail,
+                'month': month[i],
+                'msg': -1 if bad else msg[i]
+            })
+        og.insert_many(data)
+        print("insert original okay: ", proj, mail)
+    except BaseException as e:
+        print("insert original err: ", proj, mail)
 
 
 def init():
+    ogCreateIndex()
     projects = getProjects()
     print("Get projects done...")
-    print(projects)
     pp = Pool(cpu_count())
     for p in projects:
-        if p['name'] == 'asf-wide' or p['name'] == 'abdera' \
-                or p['name'] == 'accumulo' or p['name'] == 'ace':
+        if p['name'] == 'asf-wide':
             continue
         mails = p['mails']
         for m in mails:
-            pp.apply_async(insertMessages, args=(p['name'], m))
-    print("add done..")
+            try:
+                months, msg_count = getHistoryMonths(p['name'], m)
+                insertMsgCount(p['name'], m, months, msg_count)
+            except BaseException as e:
+                print("get history month err: ", p['name'], m, e)
+                continue
+            try:
+                for mon in months:
+                    pp.apply_async(insertMonthMessage, args=(p['name'], m, mon))
+            except BaseException as e:
+                print("insert month msg err: ", p['name'], m, e)
+    print("Hooray!! All data add done..")
     pp.close()
     pp.join()
 

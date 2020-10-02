@@ -31,4 +31,6 @@ def getHistoryMonths(proj, mail):
     base_url = "https://mail-archives.apache.org/mod_mbox/" + proj + "-" + mail + "/"
     months_html = request.urlopen(base_url).read().decode("utf-8")
     months = re.compile(r'''<span class="links" id="(.*?)">''').findall(months_html)
-    return months
+    msg_count = re.compile(r'''<td class="msgcount">(.*?)</td>''').findall(months_html)
+    return months, [int(mc) for mc in msg_count]
+

@@ -61,7 +61,7 @@ class Message:
         index = handler.index
         pages = int(index['pages'])
 
-        tp = ThreadPoolExecutor(1000)
+        tp = ThreadPoolExecutor(300)
         ms = []
         for i in range(pages):
             ms.append(tp.submit(self.getPageList, i))
